@@ -12,6 +12,7 @@ class Settings(BaseSettings):
 
     OPENCODE_SCRIPT_PATH: str = ""
     OPENCODE_CONFIG_PATH: str = ""
+    OPENCODE_REVIEW_CONFIG_PATH: str = ""
     OPENCODE_LOG_LEVEL: str = "info"
 
     REVIEW_TIMEOUT: int = 300
