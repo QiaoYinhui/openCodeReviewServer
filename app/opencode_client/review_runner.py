@@ -54,6 +54,8 @@ def run_opencode_review(
 ) -> ReviewResult:
     env = os.environ.copy()
     env["OPENCODE_CONFIG"] = settings.OPENCODE_CONFIG_PATH
+    if settings.OPENCODE_REVIEW_CONFIG_PATH:
+        env["OPENCODE_REVIEW_CONFIG"] = settings.OPENCODE_REVIEW_CONFIG_PATH
     env["BUN_JSC_gcMaxHeapSize"] = str(settings.BUN_MAX_HEAP_SIZE)
 
     stdin_data = json.dumps({
@@ -74,7 +76,7 @@ def run_opencode_review(
         "--print-logs",
         "--log-level", settings.OPENCODE_LOG_LEVEL,
         "--format", "json",
-        "--agent", "plan",
+        "--agent", "review",
         "run",
     ]
 
