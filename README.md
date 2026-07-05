@@ -39,7 +39,7 @@ code-review-service/
 - Python 3.10+
 - Bun 运行时（OpenCode 依赖）
 - Git
-- 已部署的 OpenCode 项目
+- 已部署的 OpenCode 项目（源码方式部署）
 
 ### 2. 安装依赖
 
@@ -153,3 +153,9 @@ OpenCode 输出 JSON 结构：
 - **tenacity**: 重试机制
 - **OpenCode**: 多Agent 代码评审引擎
 # openCodeReviewServer
+
+# ngrok使用步骤
+1. 注册账号并配置 authtoken
+# 打开 https://dashboard.ngrok.com/signup 注册
+# 然后到 https://dashboard.ngrok.com/get-started/your-authtoken 复制 token
+ngrok config add-authtoken <你的token>
