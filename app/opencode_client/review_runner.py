@@ -44,6 +44,29 @@ class ReviewResult:
         return sum(1 for i in self.issues if i.level == "info")
 
 
+def _build_review_prompt(
+    diff_content: str,
+    repo_id: int,
+    pr_number: int,
+    source_branch: str,
+    target_branch: str,
+) -> str:
+    return f"""请对以下 Pull Request 的代码变更进行专业评审。
+
+## PR 信息
+- 仓库 ID: {repo_id}
+- PR 编号: #{pr_number}
+- 源分支: {source_branch}
+- 目标分支: {target_branch}
+
+## 代码变更 (git diff)
+```
+{diff_content}
+```
+
+按你已知的输出格式返回 JSON 评审结果。"""
+
+
 def run_opencode_review(
     repo_path: str,
     diff_content: str,
@@ -58,40 +81,31 @@ def run_opencode_review(
         env["OPENCODE_REVIEW_CONFIG"] = settings.OPENCODE_REVIEW_CONFIG_PATH
     env["BUN_JSC_gcMaxHeapSize"] = str(settings.BUN_MAX_HEAP_SIZE)
 
-    stdin_data = json.dumps({
-        "repo_path": repo_path,
-        "diff_content": diff_content,
-        "pr_info": {
-            "repo_id": repo_id,
-            "pr_number": pr_number,
-            "source_branch": source_branch,
-            "target_branch": target_branch,
-        },
-        "review_rules": settings.REVIEW_RULES,
-    })
+    prompt = _build_review_prompt(diff_content, repo_id, pr_number, source_branch, target_branch)
 
     cmd = [
         "bun",
         settings.OPENCODE_SCRIPT_PATH,
         "--print-logs",
-        "--log-level", settings.OPENCODE_LOG_LEVEL,
+        "--log-level", settings.OPENCODE_LOG_LEVEL.upper(),
+        "run",
         "--format", "json",
         "--agent", "review",
-        "run",
+        "--dir", repo_path,
     ]
 
     logger.info(
         "opencode_review_starting",
-        cmd=" ".join(cmd),
+        cmd=" ".join(cmd[:10]) + " ... [prompt]",
         repo_path=repo_path,
         timeout=settings.REVIEW_TIMEOUT,
-        stdin_length=len(stdin_data),
+        prompt_length=len(prompt),
     )
 
     try:
         result = subprocess.run(
             cmd,
-            input=stdin_data,
+            input=prompt,
             capture_output=True,
             text=True,
             timeout=settings.REVIEW_TIMEOUT,
@@ -109,12 +123,12 @@ def run_opencode_review(
             logger.error(
                 "opencode_review_failed",
                 returncode=result.returncode,
-                stderr=result.stderr[:2000],
+                stderr=result.stderr[:5000],
             )
             return ReviewResult(
                 success=False,
                 raw_output=result.stdout,
-                error_message=f"OpenCode exited with code {result.returncode}: {result.stderr[:500]}",
+                error_message=f"OpenCode exited with code {result.returncode}: {result.stderr[:2000]}",
             )
 
         logger.info(
@@ -124,7 +138,7 @@ def run_opencode_review(
         )
 
         if result.stderr:
-            logger.warning("opencode_stderr", stderr=result.stderr[:2000])
+            logger.warning("opencode_stderr", stderr=result.stderr[:5000])
 
         return parse_review_output(result.stdout)
 
@@ -149,18 +163,72 @@ def run_opencode_review(
 
 
 def parse_review_output(stdout: str) -> ReviewResult:
-    try:
-        data = json.loads(stdout)
-    except json.JSONDecodeError:
-        logger.error(
-            "opencode_output_json_parse_failed",
-            stdout_length=len(stdout),
-            stdout_full=stdout[:5000] if stdout else "(empty)",
-        )
+    text_parts = []
+    errors = []
+
+    for line in stdout.strip().split("\n"):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+
+        event_type = event.get("type", "")
+
+        if event_type == "text":
+            part = event.get("part", {})
+            text = part.get("text", "")
+            if text:
+                text_parts.append(text)
+
+        if event_type == "error":
+            errors.append(str(event.get("error", "")))
+
+    full_text = "".join(text_parts)
+
+    logger.info(
+        "opencode_events_parsed",
+        text_length=len(full_text),
+        text_preview=full_text[:1000] if full_text else "(empty)",
+        error_count=len(errors),
+    )
+
+    if errors:
+        logger.error("opencode_session_errors", errors=errors)
+
+    if not full_text:
+        logger.error("opencode_no_text_output", stdout_preview=stdout[:3000])
         return ReviewResult(
             success=False,
             raw_output=stdout,
-            error_message="Failed to parse OpenCode output as JSON",
+            error_message="OpenCode produced no text output",
+        )
+
+    json_start = full_text.find("{")
+    json_end = full_text.rfind("}")
+    if json_start == -1 or json_end == -1:
+        logger.error("opencode_no_json_in_output", text_preview=full_text[:2000])
+        return ReviewResult(
+            success=False,
+            raw_output=full_text,
+            error_message="No JSON found in OpenCode output",
+        )
+
+    json_str = full_text[json_start:json_end + 1]
+
+    try:
+        data = json.loads(json_str)
+    except json.JSONDecodeError:
+        logger.error(
+            "opencode_output_json_parse_failed",
+            json_preview=json_str[:2000],
+        )
+        return ReviewResult(
+            success=False,
+            raw_output=full_text,
+            error_message="Failed to parse review result as JSON",
         )
 
     summary = data.get("summary", "")
@@ -188,5 +256,5 @@ def parse_review_output(stdout: str) -> ReviewResult:
         success=True,
         summary=summary,
         issues=issues,
-        raw_output=stdout,
+        raw_output=full_text,
     )
