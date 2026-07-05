@@ -54,7 +54,10 @@ async def handle_pr_webhook(request: Request, background_tasks: BackgroundTasks)
     bind_request_id(request_id)
 
     signature = request.headers.get("X-Hub-Signature-256", "")
+    content_type = request.headers.get("Content-Type", "")
     payload_body = await request.body()
+
+    logger.info("webhook_request_received", content_type=content_type, body_length=len(payload_body))
 
     if not payload_body:
         logger.warning("webhook_empty_body")
@@ -67,7 +70,7 @@ async def handle_pr_webhook(request: Request, background_tasks: BackgroundTasks)
     try:
         payload = json.loads(payload_body)
     except json.JSONDecodeError:
-        logger.warning("webhook_invalid_json", body_preview=payload_body[:200])
+        logger.warning("webhook_invalid_json", content_type=content_type, body_preview=payload_body[:500].decode('utf-8', errors='replace'))
         return {"status": "ignored", "reason": "invalid_json"}
 
     action = payload.get("action", "")
