@@ -156,6 +156,8 @@ OpenCode 输出 JSON 结构：
 
 # ngrok使用步骤
 1. 注册账号并配置 authtoken
-# 打开 https://dashboard.ngrok.com/signup 注册
-# 然后到 https://dashboard.ngrok.com/get-started/your-authtoken 复制 token
+- 打开 https://dashboard.ngrok.com/signup 注册
+- 然后到 https://dashboard.ngrok.com/get-started/your-authtoken 复制 token
+2. 配置authtoken
 ngrok config add-authtoken <你的token>
+3. ngrok port 8000，执行后显示的url即为公网可以访问的url
