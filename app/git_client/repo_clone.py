@@ -46,7 +46,7 @@ def clone_and_diff(
     logger.info("git_clone_done", source_branch=source_branch, path=local_path)
 
     _run_git(
-        ["fetch", "origin", target_branch, "--depth", "50"],
+        ["fetch", "origin", f"{target_branch}:refs/remotes/origin/{target_branch}", "--depth", "50"],
         cwd=local_path,
     )
     logger.info("git_fetch_target_done", target_branch=target_branch)
