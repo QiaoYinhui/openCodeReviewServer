@@ -74,7 +74,7 @@ def run_opencode_review(
         "--print-logs",
         "--log-level", settings.OPENCODE_LOG_LEVEL,
         "--format", "json",
-        "--agent", "review_coordinator",
+        "--agent", "plan",
         "run",
     ]
 
