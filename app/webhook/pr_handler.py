@@ -1,5 +1,6 @@
 import hashlib
 import hmac
+import json
 from dataclasses import dataclass
 
 from fastapi import Request, HTTPException, BackgroundTasks
@@ -55,11 +56,19 @@ async def handle_pr_webhook(request: Request, background_tasks: BackgroundTasks)
     signature = request.headers.get("X-Hub-Signature-256", "")
     payload_body = await request.body()
 
+    if not payload_body:
+        logger.warning("webhook_empty_body")
+        return {"status": "ignored", "reason": "empty_body"}
+
     if not verify_signature(payload_body, signature):
         logger.warning("webhook_signature_invalid")
         raise HTTPException(status_code=403, detail="Invalid signature")
 
-    payload = await request.json()
+    try:
+        payload = json.loads(payload_body)
+    except json.JSONDecodeError:
+        logger.warning("webhook_invalid_json", body_preview=payload_body[:200])
+        return {"status": "ignored", "reason": "invalid_json"}
 
     action = payload.get("action", "")
     if action not in ALLOWED_ACTIONS:
