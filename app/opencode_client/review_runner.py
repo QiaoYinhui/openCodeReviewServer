@@ -80,7 +80,13 @@ def run_opencode_review(
         "run",
     ]
 
-    logger.info("opencode_review_starting", repo_path=repo_path, timeout=settings.REVIEW_TIMEOUT)
+    logger.info(
+        "opencode_review_starting",
+        cmd=" ".join(cmd),
+        repo_path=repo_path,
+        timeout=settings.REVIEW_TIMEOUT,
+        stdin_length=len(stdin_data),
+    )
 
     try:
         result = subprocess.run(
@@ -90,6 +96,13 @@ def run_opencode_review(
             text=True,
             timeout=settings.REVIEW_TIMEOUT,
             env=env,
+        )
+
+        logger.info(
+            "opencode_subprocess_result",
+            returncode=result.returncode,
+            stdout_length=len(result.stdout),
+            stderr_length=len(result.stderr),
         )
 
         if result.returncode != 0:
@@ -104,7 +117,11 @@ def run_opencode_review(
                 error_message=f"OpenCode exited with code {result.returncode}: {result.stderr[:500]}",
             )
 
-        logger.info("opencode_review_completed", stdout_length=len(result.stdout))
+        logger.info(
+            "opencode_review_completed",
+            stdout_length=len(result.stdout),
+            stdout_preview=result.stdout[:5000] if result.stdout else "(empty)",
+        )
 
         if result.stderr:
             logger.warning("opencode_stderr", stderr=result.stderr[:2000])
@@ -135,7 +152,11 @@ def parse_review_output(stdout: str) -> ReviewResult:
     try:
         data = json.loads(stdout)
     except json.JSONDecodeError:
-        logger.error("opencode_output_json_parse_failed", output_preview=stdout[:1000])
+        logger.error(
+            "opencode_output_json_parse_failed",
+            stdout_length=len(stdout),
+            stdout_full=stdout[:5000] if stdout else "(empty)",
+        )
         return ReviewResult(
             success=False,
             raw_output=stdout,
