@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     GITHUB_PERSONAL_TOKEN: str = ""
     GITHUB_WEBHOOK_SECRET: str = ""
 
+    OPENCODE_USE_BINARY: bool = False
+    OPENCODE_BINARY_PATH: str = "opencode"
     OPENCODE_SCRIPT_PATH: str = ""
     OPENCODE_CONFIG_PATH: str = ""
     OPENCODE_REVIEW_CONFIG_PATH: str = ""
