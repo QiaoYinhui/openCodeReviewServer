@@ -67,23 +67,18 @@ def _build_review_prompt(
 按你已知的输出格式返回 JSON 评审结果。"""
 
 
-def run_opencode_review(
-    repo_path: str,
-    diff_content: str,
-    repo_id: int,
-    pr_number: int,
-    source_branch: str,
-    target_branch: str,
-) -> ReviewResult:
-    env = os.environ.copy()
-    env["OPENCODE_CONFIG"] = settings.OPENCODE_CONFIG_PATH
-    if settings.OPENCODE_REVIEW_CONFIG_PATH:
-        env["OPENCODE_REVIEW_CONFIG"] = settings.OPENCODE_REVIEW_CONFIG_PATH
-    env["BUN_JSC_gcMaxHeapSize"] = str(settings.BUN_MAX_HEAP_SIZE)
-
-    prompt = _build_review_prompt(diff_content, repo_id, pr_number, source_branch, target_branch)
-
-    cmd = [
+def _build_cmd(repo_path: str) -> list[str]:
+    if settings.OPENCODE_USE_BINARY:
+        return [
+            settings.OPENCODE_BINARY_PATH,
+            "--print-logs",
+            "--log-level", settings.OPENCODE_LOG_LEVEL.upper(),
+            "run",
+            "--format", "json",
+            "--agent", "review",
+            "--dir", repo_path,
+        ]
+    return [
         "bun",
         settings.OPENCODE_SCRIPT_PATH,
         "--print-logs",
@@ -93,6 +88,29 @@ def run_opencode_review(
         "--agent", "review",
         "--dir", repo_path,
     ]
+
+
+def _build_env() -> dict[str, str]:
+    env = os.environ.copy()
+    env["OPENCODE_CONFIG"] = settings.OPENCODE_CONFIG_PATH
+    if settings.OPENCODE_REVIEW_CONFIG_PATH:
+        env["OPENCODE_REVIEW_CONFIG"] = settings.OPENCODE_REVIEW_CONFIG_PATH
+    if not settings.OPENCODE_USE_BINARY:
+        env["BUN_JSC_gcMaxHeapSize"] = str(settings.BUN_MAX_HEAP_SIZE)
+    return env
+
+
+def run_opencode_review(
+    repo_path: str,
+    diff_content: str,
+    repo_id: int,
+    pr_number: int,
+    source_branch: str,
+    target_branch: str,
+) -> ReviewResult:
+    prompt = _build_review_prompt(diff_content, repo_id, pr_number, source_branch, target_branch)
+    cmd = _build_cmd(repo_path)
+    env = _build_env()
 
     logger.info(
         "opencode_review_starting",
@@ -149,10 +167,19 @@ def run_opencode_review(
             error_message=f"OpenCode review timed out after {settings.REVIEW_TIMEOUT}s",
         )
     except FileNotFoundError:
+        if settings.OPENCODE_USE_BINARY:
+            logger.error("opencode_binary_not_found", binary=settings.OPENCODE_BINARY_PATH)
+            return ReviewResult(
+                success=False,
+                error_message=(
+                    f"OpenCode binary not found: {settings.OPENCODE_BINARY_PATH}. "
+                    "Ensure it is installed and on PATH, or set OPENCODE_BINARY_PATH."
+                ),
+            )
         logger.error("opencode_binary_not_found", script=settings.OPENCODE_SCRIPT_PATH)
         return ReviewResult(
             success=False,
-            error_message=f"OpenCode binary not found: {settings.OPENCODE_SCRIPT_PATH}",
+            error_message=f"OpenCode script not found: {settings.OPENCODE_SCRIPT_PATH}",
         )
     except Exception as e:
         logger.exception("opencode_review_unexpected_error")
